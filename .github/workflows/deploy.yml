@@ -1,0 +1,57 @@
+name: Deploy DataSnake FastApi Router Project to Vultr
+on:
+  push:
+    branches:
+      - main # Trigger deployment on push to the main branch
+jobs:
+  deploy:
+    runs-on: ubuntu-latest # Use Ubuntu runner for GitHub Actions
+
+    steps:
+      # Step 1: Checkout the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v3 # Check out the code from the GitHub repository
+
+      # Step 2: Set up SSH key for server access
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 140.82.62.134 >> ~/.ssh/known_hosts
+          sudo apt-get install sshpass
+
+      - name: Debug Secrets
+        run: |
+          echo "Debugging Secrets:"
+          echo "USER: ${{ secrets.SSH_USER }}"
+          echo "HOST: ${{ secrets.SSH_HOST }}"
+          echo "SSH_PASSWORD: (hidden for security)"
+
+      - name: Use OpenAI API Key
+        run: echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+
+      # Step 3: Deploy to Vultr Server via SSH
+      - name: Deploy to Vultr Server
+        run: |
+          sshpass -p '${{ secrets.SSH_PASSWORD }}' ssh -v -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+          # Step 3.1: Navigate to /home/dev (or another desired directory)
+          cd /home/dev
+
+          # Step 3.2: Clone the GitHub repository (if not already cloned)
+          if [ ! -d 'datasnake-fastapi-router' ]; then
+            git clone https://github.com/datasnake-littlecobra/datasnake-fastapi-router.git
+          else
+            echo 'Repository already cloned. Pulling latest changes...'
+            cd datasnake-fastapi-router
+            git pull origin main
+            cd ..
+          fi
+
+          echo "Current working directory is: $(pwd)"
+          cd /home/dev/datasnake-fastapi-router
+          echo "Current working directory after cd is: $(pwd)"
+          chmod +x /home/dev/datasnake-fastapi-router/run_script.sh
+          sh /home/dev/datasnake-fastapi-router/run_script.sh
+
+          "
