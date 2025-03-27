@@ -9,8 +9,8 @@ import duckdb
 router = APIRouter()
 
 # OpenAI Model for SQL generation and summarization
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # production
-OPENAI_API_KEY = "" # dev
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # production
+# OPENAI_API_KEY = "" # dev
 print({OPENAI_API_KEY})
 llm = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_API_KEY)
 # SQL Prompt Template
