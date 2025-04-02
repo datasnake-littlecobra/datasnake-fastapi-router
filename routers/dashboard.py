@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 import polars as pl
 import duckdb
+import os
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("dashboard-pipeline.log"), logging.StreamHandler()],
+)
 
 router = APIRouter()
 
@@ -10,8 +19,26 @@ def get_dashboard_data():
     return {"dashboard": "This is internal dashboard data"}
 
 
+access_key = os.getenv("AWS_ACCESS_KEY")
+secret_key = os.getenv("AWS_SECRET_KEY")
+hostname = "sjc1.vultrobjects.com"
+
+sensor_delta_s3_bucket_raw_prod = "datasnake"
+sensor_delta_s3_key_raw_prod = "deltalake_sensor_data_processed"
+
 read_paths = {
-    "datasnake_sensor_data_processed_deltalake": "/home/resources/deltalake-sensor-data-processed",
+    "datasnake_sensor_data_processed_deltalake_local": "/home/resources/deltalake-sensor-data-processed",
+    "datasnake_sensor_data_process_deltalake_remote": f"s3://{sensor_delta_s3_bucket_raw_prod}/{sensor_delta_s3_key_raw_prod}/",
+}
+
+storage_options = {
+    "AWS_ACCESS_KEY_ID": "",
+    "AWS_SECRET_ACCESS_KEY": "",
+    "AWS_ENDPOINT": f"https://{hostname}",
+    "AWS_REGION": "us-east-1",
+    "AWS_S3_ADDRESSING_STYLE": "path",
+    "AWS_S3_ALLOW_UNSAFE_RENAME": "true",
+    "AWS_S3_USE_INSTANCE_METADATA": "false",
 }
 
 
@@ -33,14 +60,14 @@ async def get_temp_timestamp_data():
     # 'wind_direction': 78, 'timestamp': '2025-02-21 01:10:00.874345'}
     query = f"""
         SELECT *
-        FROM delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake']}')
+        FROM delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_local']}')
         WHERE postal_code != 000000
         limit 50
         """
     check_sensor_data_df = con.query(query).pl()
     print(check_sensor_data_df.head())
 
-    # query = f"""SELECT count(*) FROM delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake']}')"""
+    # query = f"""SELECT count(*) FROM delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_local']}')"""
     # check_sensor_data_df = con.query(query).pl()
     # print(check_sensor_data_df.head())
 
@@ -51,7 +78,7 @@ async def get_temp_timestamp_data():
         DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) AS hour,
         ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
     FROM 
-        delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake']}')
+        delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_local']}')
     )
     SELECT 
         temp, 
@@ -97,7 +124,7 @@ async def get_comparative_data_daily():
             humidity,
             ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('day', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
         FROM 
-            delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake']}')
+            delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_local']}')
         )
         SELECT 
             day,
@@ -149,7 +176,7 @@ async def get_comparative_data_daily():
             pressure,
             ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('day', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
         FROM 
-            delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake']}')
+            delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_local']}')
         )
         SELECT 
             day,
@@ -177,4 +204,71 @@ async def get_comparative_data_daily():
 
     return {
         "temp_pressure": temp_pressure_json,
+    }
+
+
+@router.get("/temperature-vs-hourly-data")
+async def get_temperature_vs_hourly_data():
+    """
+    Fetch hourly temperature data from Delta Lake.
+    """
+    con = duckdb.connect()
+    con.sql("INSTALL delta; LOAD delta;")
+    con.sql("INSTALL httpfs; LOAD httpfs;")
+
+    duckdb_storage_options = {
+        "s3_access_key_id": access_key,
+        "s3_secret_access_key": secret_key,
+        "s3_endpoint": f"https://{hostname}",
+        "s3_region": "us-east-1",
+        "s3_url_style": "path",
+    }
+
+    # Dynamically set DuckDB's S3 parameters
+    for key, value in duckdb_storage_options.items():
+        con.sql(f"SET {key} = '{value}';")
+
+    # con.sql(
+    #     """
+    #     SET s3_endpoint = 'https://sjc1.vultrobjects.com';
+    #     SET s3_access_key_id = '';
+    #     SET s3_secret_access_key = '';
+    #     SET s3_region = 'us-east-1';
+    #     SET s3_url_style: 'path';
+    #     SET s3_allow_unsafe_rename: 'true';
+    #     """
+    # )
+
+    print(
+        f"scanning deltalake: {read_paths['datasnake_sensor_data_process_deltalake_remote']}"
+    )
+
+    query = f"""
+    WITH hourly_data AS (
+        SELECT 
+            temp, 
+            DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) AS hour,
+            ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
+        FROM delta_scan('{read_paths['datasnake_sensor_data_process_deltalake_remote']}')
+    )
+    SELECT 
+        temp, 
+        hour 
+    FROM 
+        hourly_data 
+    WHERE 
+        rn = 1
+    ORDER BY 
+        hour DESC
+    LIMIT 100
+    """
+
+    df = con.execute(query).pl()
+    print(df.head())
+    con.close()
+
+    temp_hourly_json = df.to_dicts()
+
+    return {
+        "temp_hourly": temp_hourly_json,
     }
