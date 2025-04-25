@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from routers import items
 from routers import chatagent, client_api, dashboard, auth
+from routers.client_apis.authorize_login import router as authorize_login_router
+from routers.client_apis.fetch_sensor_data import router as fetch_sensor_data
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.prompts import ChatPromptTemplate
 import duckdb
@@ -9,6 +11,8 @@ app = FastAPI()
 app.include_router(items.router)
 app.include_router(chatagent.router)
 app.include_router(client_api.router)
+app.include_router(authorize_login_router, prefix="/api/client")
+app.include_router(fetch_sensor_data, prefix="/api/client")
 app.include_router(auth.router, prefix="/auth")
 app.include_router(dashboard.router, prefix="/dashboard")
 

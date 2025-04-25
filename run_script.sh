@@ -111,8 +111,8 @@ fi
 # fi
 
 # CASSANDRA_HOST="127.0.0.1"
-# USERNAME="cassandra"
-# PASSWORD="cassandra"
+# USERNAME=""
+# PASSWORD=""
 # PROJECT_NAME="datasnake-fastapi-router"
 # CQL_FILE="/home/dev/${PROJECT_NAME}/db-script.cql"
 # echo $CQL_FILE

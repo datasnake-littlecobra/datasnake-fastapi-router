@@ -87,8 +87,8 @@ async def login(auth_data: AuthRequest):
     print("200 response with", data)
     return {
         "status": response.status_code,
-        "token": data.get("token"),
-        "role": data.get("role"),
+        "token": data.get("user").get("uuid"),
+        "role": data.get("user").get("role"),
         "message": data.get("message"),
         "username": data.get("user").get("username"),
     }

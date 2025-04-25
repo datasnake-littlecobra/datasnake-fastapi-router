@@ -252,29 +252,29 @@ async def get_temperature_vs_hourly_data_duckdb():
     #     f"scanning deltalake: {read_paths['datasnake_sensor_data_process_deltalake_remote']}"
     # )
 
-    # query = f"""
-    # WITH hourly_data AS (
-    #     SELECT
-    #         temp,
-    #         DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) AS hour,
-    #         ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
-    #     FROM delta_scan('{read_paths['datasnake_sensor_data_process_deltalake_remote']}')
-    # )
-    # SELECT
-    #     temp,
-    #     hour
-    # FROM
-    #     hourly_data
-    # WHERE
-    #     rn = 1
-    # ORDER BY
-    #     hour DESC
-    # LIMIT 100
-    # """
+    query = f"""
+    WITH hourly_data AS (
+        SELECT
+            temp,
+            DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) AS hour,
+            ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
+        FROM delta_scan('{read_paths['datasnake_sensor_data_process_deltalake_remote']}')
+    )
+    SELECT
+        temp,
+        hour
+    FROM
+        hourly_data
+    WHERE
+        rn = 1
+    ORDER BY
+        hour DESC
+    LIMIT 100
+    """
 
-    # df = con.execute(query).pl()
-    # print(df.head())
-    # con.close()
+    df = con.execute(query).pl()
+    print(df.head())
+    con.close()
 
     temp_hourly_json = df.to_dicts()
 
@@ -298,8 +298,8 @@ async def get_temperature_vs_hourly_data_debug():
     dt = DeltaTable(
         "s3://datasnake/deltalake_sensor_data_processed",
         storage_options={
-            "AWS_ACCESS_KEY_ID": access_key,
-            "AWS_SECRET_ACCESS_KEY": secret_key,
+            "AWS_ACCESS_KEY_ID": "",
+            "AWS_SECRET_ACCESS_KEY": "",
             "AWS_ENDPOINT": "https://sjc1.vultrobjects.com",
         },
     )
