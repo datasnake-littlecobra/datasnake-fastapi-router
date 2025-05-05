@@ -93,7 +93,8 @@ async def get_sensor_data_by_lat_lon(auth_data: SensorDataLatLon):
         query = """
         SELECT lat, lon, temp, humidity, country, state 
         FROM sensor_data_processed 
-        WHERE lat = %s and lon = %s
+        WHERE lat = %s and lon = %s 
+        ALLOW FILTERING 
         LIMIT 5
         """
         rows = session.execute(query, (auth_data.lat, auth_data.lon))
