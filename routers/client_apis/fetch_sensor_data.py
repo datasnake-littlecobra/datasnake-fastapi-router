@@ -74,12 +74,21 @@ async def get_sensor_data(auth_data: AuthRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class SensorDataLatLon(BaseModel):
+    username: str
+    password: str
+    lat: float
+    lon: float
+
+
 @router.post("/current-sensor-data-by-lat-lon")
-async def get_sensor_data_by_lat_lon(auth_data: AuthRequest):
+async def get_sensor_data_by_lat_lon(auth_data: SensorDataLatLon):
     try:
-        print("inside api client get sensor data :")
-        print("inside api client get sensor data :", auth_data)
-        response = await is_authenticated(auth_data)
+        print("inside api client get sensor data by LAT LON:")
+        print("inside api client get sensor data by LAT LON:", auth_data)
+        credentials = {"username": auth_data.username, "password": auth_data.password}
+        response = await is_authenticated(AuthRequest(**credentials))
+        print("get_sensor_data_by_lat_lon AUTHENTICATED!!!")
         session = get_cassandra_session()
         query = """
         SELECT lat, lon, temp, humidity, country, state 
@@ -87,7 +96,7 @@ async def get_sensor_data_by_lat_lon(auth_data: AuthRequest):
         WHERE lat = %s and lon = %s
         LIMIT 5
         """
-        rows = session.execute(query)
+        rows = session.execute(query, (auth_data.lat, auth_data.lon))
 
         data = [
             {
