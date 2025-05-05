@@ -72,3 +72,45 @@ async def get_sensor_data(auth_data: AuthRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/current-sensor-data-by-lat-lon")
+async def get_sensor_data_by_lat_lon(auth_data: AuthRequest):
+    try:
+        print("inside api client get sensor data :")
+        print("inside api client get sensor data :", auth_data)
+        response = await is_authenticated(auth_data)
+        session = get_cassandra_session()
+        query = """
+        SELECT lat, lon, temp, humidity, country, state 
+        FROM sensor_data_processed 
+        WHERE lat = %s and lon = %s
+        LIMIT 5
+        """
+        rows = session.execute(query)
+
+        data = [
+            {
+                "lat": row.lat,
+                "lon": row.lon,
+                "temp": row.temp,
+                "humidity": row.humidity,
+                "country": row.country,
+                "state": row.state,
+            }
+            for row in rows
+        ]
+
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail="No sensor data found for the given coordinates.",
+            )
+
+        return {"sensor_data": data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# @router.post("/current-sensor-data-by-lat-lon-range")
