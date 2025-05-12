@@ -134,8 +134,8 @@ class SensorDataCountry(BaseModel):
 @router.post("/current-sensor-data-by-country")
 async def get_sensor_data_by_country(auth_data: SensorDataCountry):
     try:
-        print("inside api client get sensor data by LAT LON:")
-        print("inside api client get sensor data by LAT LON:", auth_data)
+        print("inside api client get sensor data by country:")
+        print("inside api client get sensor data by country:", auth_data)
         credentials = {"username": auth_data.username, "password": auth_data.password}
         response = await is_authenticated(AuthRequest(**credentials))
         print("get_sensor_data_by_lat_lon AUTHENTICATED!!!")
