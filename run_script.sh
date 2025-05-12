@@ -110,10 +110,10 @@ fi
 #     $VENV_DIR/bin/python -m pip install packaging
 # fi
 
-CASSANDRA_HOST="127.0.0.1"
-USERNAME="cassandra"
-PASSWORD="cassandra"
-PROJECT_NAME="datasnake-fastapi-router"
-CQL_FILE="/home/dev/${PROJECT_NAME}/db-script.cql"
-echo $CQL_FILE
-cqlsh $CASSANDRA_HOST -u $USERNAME -p $PASSWORD -f $CQL_FILE
+# CASSANDRA_HOST="127.0.0.1"
+# USERNAME="cassandra"
+# PASSWORD="cassandra"
+# PROJECT_NAME="datasnake-fastapi-router"
+# CQL_FILE="/home/dev/${PROJECT_NAME}/db-script.cql"
+# echo $CQL_FILE
+# cqlsh $CASSANDRA_HOST -u $USERNAME -p $PASSWORD -f $CQL_FILE
