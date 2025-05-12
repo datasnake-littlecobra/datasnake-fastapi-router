@@ -12,5 +12,5 @@ WHERE
     postal_code IS NOT NULL AND 
     timestamp IS NOT NULL AND 
     id IS NOT NULL
-PRIMARY KEY ((lat, lon), country, state, postal_code, timestamp, id)
+PRIMARY KEY ((lat), lon, country, state, postal_code, timestamp, id)
 WITH CLUSTERING ORDER BY (country ASC, state ASC, postal_code ASC, timestamp DESC, id ASC);
