@@ -8,6 +8,8 @@ charset-normalizer==3.4.1
 click==8.1.8
 colorama==0.4.6
 cryptography==44.0.2
+daft==0.4.18
+getdaft==0.4.18
 deltalake==0.25.4
 distro==1.9.0
 dnspython==2.7.0

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from routers import items
 from routers import chatagent, client_api, dashboard, auth
 from routers.client_apis.authorize_login import router as authorize_login_router
-from routers.client_apis.fetch_sensor_data import router as fetch_sensor_data
+from routers.client_apis_deltalake.fetch_sensor_data import router as fetch_sensor_data
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.prompts import ChatPromptTemplate
 import duckdb

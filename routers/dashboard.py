@@ -37,7 +37,7 @@ sensor_delta_s3_key_raw_prod = "deltalake_sensor_data_processed"
 
 read_paths = {
     "datasnake_sensor_data_processed_deltalake_local": "/home/resources/deltalake-sensor-data-processed",
-    "datasnake_sensor_data_process_deltalake_remote": f"s3://{sensor_delta_s3_bucket_raw_prod}/{sensor_delta_s3_key_raw_prod}/",
+    "datasnake_sensor_data_processed_deltalake_remote": f"s3://{sensor_delta_s3_bucket_raw_prod}/{sensor_delta_s3_key_raw_prod}/",
 }
 
 storage_options = {
@@ -249,7 +249,7 @@ async def get_temperature_vs_hourly_data_duckdb():
     # )
 
     # print(
-    #     f"scanning deltalake: {read_paths['datasnake_sensor_data_process_deltalake_remote']}"
+    #     f"scanning deltalake: {read_paths['datasnake_sensor_data_processed_deltalake_remote']}"
     # )
 
     query = f"""
@@ -258,7 +258,7 @@ async def get_temperature_vs_hourly_data_duckdb():
             temp,
             DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) AS hour,
             ROW_NUMBER() OVER (PARTITION BY DATE_TRUNC('hour', CAST(timestamp AS TIMESTAMP)) ORDER BY timestamp) AS rn
-        FROM delta_scan('{read_paths['datasnake_sensor_data_process_deltalake_remote']}')
+        FROM delta_scan('{read_paths['datasnake_sensor_data_processed_deltalake_remote']}')
     )
     SELECT
         temp,
