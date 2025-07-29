@@ -100,7 +100,7 @@ async def is_authenticated(request: AuthRequest):
     }
 
 
-@router.post("/current-sensor-data")
+@router.post("/current-sensor-data-deltalake")
 async def get_sensor_data(auth_data: AuthRequest):
     try:
         print("inside api client get sensor data :")
