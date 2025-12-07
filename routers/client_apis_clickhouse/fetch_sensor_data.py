@@ -93,51 +93,53 @@ async def get_sensor_data(
                 "status": "unauthorized",
             }
 
-        # ✅ Connect to ClickHouse via Ibis
-        con = ibis.clickhouse.connect(
+        # ✅ Connect to ClickHouse via raw SQL (more reliable for pagination)
+        client = clickhouse_connect.get_client(
             host=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"),
-            port=int(os.getenv("CLICKHOUSE_PORT", 8123)),
+            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
             user=os.getenv("CLICKHOUSE_USER", "default"),
             password=os.getenv("CLICKHOUSE_PASSWORD", ""),
             database=os.getenv("CLICKHOUSE_SENSOR_DATABASE", "datasnake"),
         )
 
-        # ✅ Get total count first (for client pagination)
-        table = con.table("sensor_data_processed")
-        total_count = table.count().execute()
+        # ✅ Get total count first
+        total_result = client.query(
+            "SELECT COUNT(*) as total FROM sensor_data_processed"
+        )
+        total_count = total_result.result_rows[0][0] if total_result.result_rows else 0
         print(f"Total records in database: {total_count}")
 
-        # ✅ Define Ibis table and query with pagination + ordering
-        query = (
-            table[
-                [
-                    "device_id",
-                    "lat",
-                    "lon",
-                    "temp",
-                    "humidity",
-                    "pressure",
-                    "country",
-                    "state",
-                    "city",
-                    "postal_code",
-                    "timestamp",
-                ]
-            ]
-            .order_by(ibis.desc("timestamp"))  # Latest first
-            .limit(limit)
-            .offset(offset)
-        )
+        # ✅ Query with pagination and ordering
+        query = f"""
+            SELECT 
+                device_id,
+                lat,
+                lon,
+                temp,
+                humidity,
+                pressure,
+                country,
+                state,
+                city,
+                postal_code,
+                timestamp
+            FROM sensor_data_processed
+            ORDER BY timestamp DESC
+            LIMIT {limit} OFFSET {offset}
+        """
 
-        # ✅ Execute query (this returns a pandas DataFrame)
-        result_df = query.execute()
-        print(f"Query returned {len(result_df)} rows")
+        result = client.query(query)
+        rows = result.result_rows
+        columns = [col[0] for col in result.column_names]
 
-        # ✅ Convert to Polars for consistency
-        pl_df = pl.DataFrame(result_df)
+        print(f"Query returned {len(rows)} rows")
 
-        # ✅ Convert to JSON-serializable dict list
-        data = pl_df.to_dicts()
+        # ✅ Convert to Polars
+        if rows:
+            pl_df = pl.DataFrame(rows, schema=columns)
+            data = pl_df.to_dicts()
+        else:
+            data = []
 
         return {
             "sensor_data": data,
@@ -196,58 +198,68 @@ async def get_sensor_data_filtered(
                 "status": "unauthorized",
             }
 
-        # ✅ Connect to ClickHouse via Ibis
-        con = ibis.clickhouse.connect(
+        # ✅ Connect to ClickHouse
+        client = clickhouse_connect.get_client(
             host=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"),
-            port=int(os.getenv("CLICKHOUSE_PORT", 8123)),
+            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
             user=os.getenv("CLICKHOUSE_USER", "default"),
             password=os.getenv("CLICKHOUSE_PASSWORD", ""),
             database=os.getenv("CLICKHOUSE_SENSOR_DATABASE", "datasnake"),
         )
 
-        # ✅ Build query with filters
-        table = con.table("sensor_data_processed")
-
-        # Apply filters progressively
+        # ✅ Build WHERE clause dynamically
+        where_clauses = []
         if country:
-            table = table.filter(table.country == country)
+            where_clauses.append(f"country = '{country}'")
         if state:
-            table = table.filter(table.state == state)
+            where_clauses.append(f"state = '{state}'")
         if temp_min is not None:
-            table = table.filter(table.temp >= temp_min)
+            where_clauses.append(f"temp >= {temp_min}")
         if temp_max is not None:
-            table = table.filter(table.temp <= temp_max)
+            where_clauses.append(f"temp <= {temp_max}")
+
+        where_clause = " AND ".join(where_clauses)
+        if where_clause:
+            where_clause = f"WHERE {where_clause}"
 
         # ✅ Get filtered total count
-        total_count = table.count().execute()
+        count_query = (
+            f"SELECT COUNT(*) as total FROM sensor_data_processed {where_clause}"
+        )
+        total_result = client.query(count_query)
+        total_count = total_result.result_rows[0][0] if total_result.result_rows else 0
         print(f"Filtered records: {total_count}")
 
-        # ✅ Apply pagination and ordering
-        query = (
-            table[
-                [
-                    "device_id",
-                    "lat",
-                    "lon",
-                    "temp",
-                    "humidity",
-                    "pressure",
-                    "country",
-                    "state",
-                    "city",
-                    "postal_code",
-                    "timestamp",
-                ]
-            ]
-            .order_by(ibis.desc("timestamp"))
-            .limit(limit)
-            .offset(offset)
-        )
+        # ✅ Query with filters, pagination, and ordering
+        data_query = f"""
+            SELECT 
+                device_id,
+                lat,
+                lon,
+                temp,
+                humidity,
+                pressure,
+                country,
+                state,
+                city,
+                postal_code,
+                timestamp
+            FROM sensor_data_processed
+            {where_clause}
+            ORDER BY timestamp DESC
+            LIMIT {limit} OFFSET {offset}
+        """
 
-        # ✅ Execute query
-        result_df = query.execute()
-        pl_df = pl.DataFrame(result_df)
-        data = pl_df.to_dicts()
+        result = client.query(data_query)
+        rows = result.result_rows
+        columns = [col[0] for col in result.column_names]
+
+        # ✅ Convert to Polars
+        if rows:
+            pl_df = pl.DataFrame(rows, schema=columns)
+            data = pl_df.to_dicts()
+        else:
+            data = []
 
         return {
             "sensor_data": data,
@@ -268,53 +280,3 @@ async def get_sensor_data_filtered(
         raise HTTPException(
             status_code=500, detail=f"Error fetching sensor data: {str(e)}"
         )
-
-
-# @router.post("/current-sensor-data")
-# async def get_sensor_data(auth_data: AuthRequest):
-#     try:
-#         is_auth = await is_authenticated(auth_data)
-#         if not is_auth:
-#             return {"sensor_data": [], "status": "unauthorized"}
-
-#         # Fetch from ClickHouse
-#         client = clickhouse_connect.get_client(
-#             host="127.0.0.1", password="", database="datasnake"
-#         )
-#         result = client.query(
-#             """
-#             SELECT lat, lon, temp, humidity, country, state
-#             FROM sensor_data_processed
-#             LIMIT 5
-#         """
-#         )
-#         rows = result.result_rows
-#         columns = result.result_columns
-
-#         # Load into Polars
-#         df = pl.DataFrame(rows, schema=columns)
-#         print("came back to df", df)
-#         # Register with DuckDB
-#         con = duckdb.connect()
-#         con.register("sensor_data", df.to_arrow())
-
-#         # Run DuckDB SQL (e.g., local filtering or aggregations)
-#         result_df = pl.from_arrow(
-#             con.execute(
-#                 """
-#                 SELECT country, COUNT(*) as count, AVG(temp) as avg_temp
-#                 FROM sensor_data
-#                 GROUP BY country
-#                 ORDER BY count DESC
-#                 LIMIT 5
-#             """
-#             ).arrow()
-#         )
-#         print("aggregated:", result_df)
-
-#         return {"sensor_data": df.to_dicts(), "status": "success"}
-
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=500, detail=f"Error fetching sensor data: {str(e)}"
-#         )
