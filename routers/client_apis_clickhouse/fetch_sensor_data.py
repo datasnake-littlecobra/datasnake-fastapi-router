@@ -91,10 +91,17 @@ async def get_sensor_data(
 
         # ✅ Connect to ClickHouse
         print("[3/7] Connecting to ClickHouse...")
-        print(f"[3/7] Host: {os.getenv('CLICKHOUSE_HOST', '127.0.0.1')}, Port: {os.getenv('CLICKHOUSE_PORT', 9000)}")
+        clickhouse_port = int(os.getenv("CLICKHOUSE_PORT", 9000))
+        print(f"[3/7] Host: {os.getenv('CLICKHOUSE_HOST', '127.0.0.1')}, Port: {clickhouse_port}")
+        
+        # Use native protocol (9000) for better streaming support, not HTTP (8123)
+        if clickhouse_port == 8123:
+            print("[3/7] ⚠️  WARNING: Port 8123 is HTTP interface, switching to native protocol (9000)")
+            clickhouse_port = 9000
+        
         client = clickhouse_connect.get_client(
             host=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"),
-            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
+            port=clickhouse_port,
             user=os.getenv("CLICKHOUSE_USER", "default"),
             password=os.getenv("CLICKHOUSE_PASSWORD", ""),
             database=os.getenv("CLICKHOUSE_SENSOR_DATABASE", "datasnake"),
@@ -132,8 +139,9 @@ async def get_sensor_data(
 
         print("[6/7] Executing query...")
         result = client.query(query)
-        print("[6/7] Query executed, converting rows to list...")
-        rows = list(result.result_rows)
+        print("[6/7] Query executed, fetching result as list...")
+        # Use result_as_list() to properly materialize the entire result set
+        rows = result.result_as_list()
         columns = result.result_columns
         print(f"[6/7] ✅ Query returned {len(rows)} rows, columns: {columns}")
 
