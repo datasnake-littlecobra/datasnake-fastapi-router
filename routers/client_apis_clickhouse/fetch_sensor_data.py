@@ -103,51 +103,51 @@ async def get_sensor_data(auth_data: AuthRequest):
         )
 
 
-# @router.post("/current-sensor-data")
-# async def get_sensor_data(auth_data: AuthRequest):
-#     try:
-#         is_auth = await is_authenticated(auth_data)
-#         if not is_auth:
-#             return {"sensor_data": [], "status": "unauthorized"}
+@router.post("/current-sensor-data-clickhouse-query")
+async def get_sensor_data(auth_data: AuthRequest):
+    try:
+        is_auth = await is_authenticated(auth_data)
+        if not is_auth:
+            return {"sensor_data": [], "status": "unauthorized"}
 
-#         # Fetch from ClickHouse
-#         client = clickhouse_connect.get_client(
-#             host="127.0.0.1", password="", database="datasnake"
-#         )
-#         result = client.query(
-#             """
-#             SELECT lat, lon, temp, humidity, country, state
-#             FROM sensor_data_processed
-#             LIMIT 5
-#         """
-#         )
-#         rows = result.result_rows
-#         columns = result.result_columns
+        # Fetch from ClickHouse
+        client = clickhouse_connect.get_client(
+            host="127.0.0.1", password=os.getenv("CLICKHOUSE_PASSWORD"), database=os.getenv("CLICKHOUSE_SENSOR_DATABASE")
+        )
+        result = client.query(
+            """
+            SELECT lat, lon, temp, humidity, country, state
+            FROM sensor_data_processed
+            LIMIT 5
+        """
+        )
+        rows = result.result_rows
+        columns = result.result_columns
 
-#         # Load into Polars
-#         df = pl.DataFrame(rows, schema=columns)
-#         print("came back to df", df)
-#         # Register with DuckDB
-#         con = duckdb.connect()
-#         con.register("sensor_data", df.to_arrow())
+        # Load into Polars
+        df = pl.DataFrame(rows, schema=columns)
+        print("came back to df", df)
+        # Register with DuckDB
+        con = duckdb.connect()
+        con.register("sensor_data", df.to_arrow())
 
-#         # Run DuckDB SQL (e.g., local filtering or aggregations)
-#         result_df = pl.from_arrow(
-#             con.execute(
-#                 """
-#                 SELECT country, COUNT(*) as count, AVG(temp) as avg_temp
-#                 FROM sensor_data
-#                 GROUP BY country
-#                 ORDER BY count DESC
-#                 LIMIT 5
-#             """
-#             ).arrow()
-#         )
-#         print("aggregated:", result_df)
+        # Run DuckDB SQL (e.g., local filtering or aggregations)
+        result_df = pl.from_arrow(
+            con.execute(
+                """
+                SELECT country, COUNT(*) as count, AVG(temp) as avg_temp
+                FROM sensor_data
+                GROUP BY country
+                ORDER BY count DESC
+                LIMIT 5
+            """
+            ).arrow()
+        )
+        print("aggregated:", result_df)
 
-#         return {"sensor_data": df.to_dicts(), "status": "success"}
+        return {"sensor_data": df.to_dicts(), "status": "success"}
 
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=500, detail=f"Error fetching sensor data: {str(e)}"
-#         )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching sensor data: {str(e)}"
+        )
