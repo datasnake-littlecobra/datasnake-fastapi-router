@@ -67,12 +67,18 @@ async def get_sensor_data(
     - status: Success or error status
     """
     try:
-        print("Inside API client get sensor data")
-        print("Auth Data:", auth_data)
+        print("=" * 60)
+        print("[1/7] Inside API client get sensor data")
+        print(f"[1/7] Auth Data: {auth_data}")
+        print(f"[1/7] Query params - offset: {offset}, limit: {limit}")
 
         # ✅ Authenticate
+        print("[2/7] Starting authentication...")
         response = await is_authenticated(auth_data)
+        print(f"[2/7] Authentication response: {response}")
+        
         if not response:
+            print("[2/7] Authentication failed, returning early")
             return {
                 "sensor_data": [],
                 "total": 0,
@@ -81,8 +87,11 @@ async def get_sensor_data(
                 "message": "Authentication failed.",
                 "status": "unauthorized",
             }
+        print("[2/7] ✅ Authentication successful")
 
         # ✅ Connect to ClickHouse
+        print("[3/7] Connecting to ClickHouse...")
+        print(f"[3/7] Host: {os.getenv('CLICKHOUSE_HOST', '127.0.0.1')}, Port: {os.getenv('CLICKHOUSE_PORT', 9000)}")
         client = clickhouse_connect.get_client(
             host=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"),
             port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
@@ -90,15 +99,18 @@ async def get_sensor_data(
             password=os.getenv("CLICKHOUSE_PASSWORD", ""),
             database=os.getenv("CLICKHOUSE_SENSOR_DATABASE", "datasnake"),
         )
+        print("[3/7] ✅ ClickHouse client connected")
 
         # ✅ Get total count
+        print("[4/7] Fetching total record count...")
         total_result = client.query(
             "SELECT COUNT(*) as total FROM sensor_data_processed"
         )
         total_count = total_result.result_rows[0][0] if total_result.result_rows else 0
-        print(f"Total records in database: {total_count}")
+        print(f"[4/7] ✅ Total records in database: {total_count}")
 
         # ✅ Query with pagination
+        print(f"[5/7] Building pagination query with LIMIT {limit} OFFSET {offset}...")
         query = f"""
             SELECT 
                 device_id,
@@ -116,20 +128,29 @@ async def get_sensor_data(
             ORDER BY timestamp DESC
             LIMIT {limit} OFFSET {offset}
         """
+        print(f"[5/7] Query built successfully")
 
+        print("[6/7] Executing query...")
         result = client.query(query)
-        rows = result.result_rows
+        print("[6/7] Query executed, converting rows to list...")
+        rows = list(result.result_rows)
         columns = result.result_columns
-
-        print(f"Query returned {len(rows)} rows")
+        print(f"[6/7] ✅ Query returned {len(rows)} rows, columns: {columns}")
 
         # ✅ Convert to Polars
+        print("[7/7] Converting to Polars DataFrame...")
         if rows:
+            print(f"[7/7] Creating Polars DataFrame with {len(rows)} rows...")
             pl_df = pl.DataFrame(rows, schema=columns)
+            print(f"[7/7] Converting DataFrame to dicts...")
             data = pl_df.to_dicts()
+            print(f"[7/7] ✅ Conversion complete, {len(data)} records ready")
         else:
+            print("[7/7] No rows returned, empty data list")
             data = []
 
+        print("[7/7] ✅ Returning response")
+        print("=" * 60)
         return {
             "sensor_data": data,
             "total": int(total_count),
