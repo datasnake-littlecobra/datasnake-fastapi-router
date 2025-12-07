@@ -110,5 +110,8 @@ fi
 #     $VENV_DIR/bin/python -m pip install packaging
 # fi
 
+# Step 4: Stop and Delete the FastAPI app using pm2
 pm2 stop datasnake-fastapi-router
+pm2 delete datasnake-fastapi-router
+# Start the FastAPI app with pm2 using uvicorn
 pm2 start ./venv/bin/python --name datasnake-fastapi-router -- -m uvicorn main:app --host 0.0.0.0 --port 8000
