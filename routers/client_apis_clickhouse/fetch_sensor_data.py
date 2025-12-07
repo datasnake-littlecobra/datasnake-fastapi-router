@@ -3,9 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
 from pydantic import BaseModel
 import logging
 import httpx
+import polars as pl
+import duckdb
+import ibis
+import os
 
 router = APIRouter()
-
 
 class AuthRequest(BaseModel):
     username: str
@@ -22,7 +25,7 @@ async def is_authenticated(request: AuthRequest):
     logging.info(f"inside cloudflare login auth: {request}")
     print(f"inside cloudflare login auth: {request}")
     async with httpx.AsyncClient() as client:
-        print("going to call client")
+        print("going to call cloudflare client inside clickhouse api route")
         response = await client.post(CLOUDFLARE_WORKER_URL_LOGIN, json=request.dict())
         print("after calling client", response.json())
 
@@ -44,46 +47,93 @@ async def is_authenticated(request: AuthRequest):
 @router.post("/current-sensor-data")
 async def get_sensor_data(auth_data: AuthRequest):
     try:
-        print("inside api client get sensor data :")
-        print("inside api client get sensor data :", auth_data)
+        print("Inside API client get sensor data")
+        print("Auth Data:", auth_data)
+
+        # ✅ Authenticate
         response = await is_authenticated(auth_data)
-        # session = get_cassandra_session()
-        
-        # Establish a connection
-        # user="your_user",
-        client = clickhouse_connect.get_client(
+        if not response:
+            return {
+                "sensor_data": [],
+                "message": "Authentication failed.",
+                "status": "unauthorized",
+            }
+
+        # ✅ Connect to ClickHouse via Ibis
+        con = ibis.clickhouse.connect(
             host="127.0.0.1",
-            password="",
-            database="datasnake",
+            port=8123,
+            user=os.getenv("CLICKHOUSE_USER"),
+            password=os.getenv("CLICKHOUSE_PASSWORD"),
+            database=os.getenv("CLICKHOUSE_SENSOR_DATABASE"),
         )
 
-        # Execute a query and fetch results
-        query = """
-        SELECT lat, lon, temp, humidity, country, state 
-        FROM sensor_data_processed 
-        LIMIT 5
-        """
-        result = client.query(query)
+        # ✅ Define Ibis table and query
+        table = con.table("sensor_data_processed")
+        query = table[["lat", "lon", "temp", "humidity", "country", "state"]].limit(50)
 
-        # Access data
-        rows = result.result_rows  # Get data as a list of tuples
-        columns = result.column_names  # Get column names
+        # ✅ Execute query (this returns a pandas DataFrame)
+        result_df = query.execute()
 
-        # rows = session.execute(query)
+        # ✅ Convert to Polars for consistency (optional)
+        pl_df = pl.DataFrame(result_df)
 
-        data = [
-            {
-                "lat": row.lat,
-                "lon": row.lon,
-                "temp": row.temp,
-                "humidity": row.humidity,
-                "country": row.country,
-                "state": row.state,
-            }
-            for row in rows
-        ]
+        # ✅ Convert to JSON-serializable dict list
+        data = pl_df.to_dicts()
 
-        return {"sensor_data": data}
+        return {"sensor_data": data, "status": "success"}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching sensor data: {str(e)}"
+        )
+
+
+# @router.post("/current-sensor-data")
+# async def get_sensor_data(auth_data: AuthRequest):
+#     try:
+#         is_auth = await is_authenticated(auth_data)
+#         if not is_auth:
+#             return {"sensor_data": [], "status": "unauthorized"}
+
+#         # Fetch from ClickHouse
+#         client = clickhouse_connect.get_client(
+#             host="127.0.0.1", password="", database="datasnake"
+#         )
+#         result = client.query(
+#             """
+#             SELECT lat, lon, temp, humidity, country, state
+#             FROM sensor_data_processed
+#             LIMIT 5
+#         """
+#         )
+#         rows = result.result_rows
+#         columns = result.result_columns
+
+#         # Load into Polars
+#         df = pl.DataFrame(rows, schema=columns)
+#         print("came back to df", df)
+#         # Register with DuckDB
+#         con = duckdb.connect()
+#         con.register("sensor_data", df.to_arrow())
+
+#         # Run DuckDB SQL (e.g., local filtering or aggregations)
+#         result_df = pl.from_arrow(
+#             con.execute(
+#                 """
+#                 SELECT country, COUNT(*) as count, AVG(temp) as avg_temp
+#                 FROM sensor_data
+#                 GROUP BY country
+#                 ORDER BY count DESC
+#                 LIMIT 5
+#             """
+#             ).arrow()
+#         )
+#         print("aggregated:", result_df)
+
+#         return {"sensor_data": df.to_dicts(), "status": "success"}
+
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=500, detail=f"Error fetching sensor data: {str(e)}"
+#         )

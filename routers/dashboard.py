@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 import polars as pl
 import duckdb
 import os
 import logging
 from deltalake import DeltaTable
 from datetime import datetime, timedelta
+import ibis
 
 # Configure logging
 logging.basicConfig(
@@ -682,3 +683,72 @@ async def temperature_humidity_hourly_data(
     ]
 
     return {"records": records, "meta": {"date": str(max_date)}}
+
+
+@router.get("/temperature-vs-daily-data")
+async def get_temperature_data_daily():
+    try:
+        print("Inside API client get temperature vs daily data")
+
+        # Connect to ClickHouse via Ibis
+        con = ibis.clickhouse.connect(
+            host="127.0.0.1",
+            port=8123,
+            user="default",
+            password="",  # Add if required
+            database="datasnake",
+        )
+
+        # Define Ibis table and query
+        table = con.table("sensor_data_processed")
+        query = table[["temp", "processed_at"]].limit(500)
+
+        # ✅ Execute query (this returns a pandas DataFrame)
+        result_df = query.execute()
+
+        # ✅ Convert to Polars for consistency (optional)
+        pl_df = pl.DataFrame(result_df)
+
+        # ✅ Convert to JSON-serializable dict list
+        # data = pl_df.to_dicts()
+
+        # con.close()
+
+        con_duck = duckdb.connect()
+        con_duck.register("sensor_data", pl_df)
+
+        # 4. Run the SQL query
+        sql = """
+            WITH ranked_data AS (
+                SELECT 
+                    DATE_TRUNC('day', CAST(processed_at AS TIMESTAMP)) AS day,
+                    temp,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY DATE_TRUNC('day', CAST(processed_at AS TIMESTAMP)) 
+                        ORDER BY processed_at
+                    ) AS rn
+                FROM sensor_data
+            )
+            SELECT 
+                day,
+                temp,
+            FROM ranked_data
+            WHERE rn = 1
+            ORDER BY day
+            LIMIT 50
+        """
+        df_result = con_duck.sql(sql).pl()
+
+        # 5. Convert to Arrow -> dicts
+        arrow_table = df_result.to_arrow()
+        temp_humidity_json = df_result.to_dicts()
+
+        print("Query result preview:")
+        print(df_result.head())
+
+        return {"temp_vs_time_daily": temp_humidity_json, "status": "success"}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching sensor data: {str(e)}"
+        )

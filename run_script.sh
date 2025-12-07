@@ -110,10 +110,5 @@ fi
 #     $VENV_DIR/bin/python -m pip install packaging
 # fi
 
-# CASSANDRA_HOST="127.0.0.1"
-# USERNAME=""
-# PASSWORD=""
-# PROJECT_NAME="datasnake-fastapi-router"
-# CQL_FILE="/home/dev/${PROJECT_NAME}/db-script.cql"
-# echo $CQL_FILE
-# cqlsh $CASSANDRA_HOST -u $USERNAME -p $PASSWORD -f $CQL_FILE
+pm2 stop datasnake-fastapi-router
+pm2 start ./venv/bin/python --name datasnake-fastapi-router -- -m uvicorn main:app --host 0.0.0.0 --port 8000
