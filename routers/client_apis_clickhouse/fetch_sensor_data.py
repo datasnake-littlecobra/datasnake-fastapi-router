@@ -96,10 +96,10 @@ async def get_sensor_data(
         # ✅ Connect to ClickHouse via raw SQL (more reliable for pagination)
         client = clickhouse_connect.get_client(
             host=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"),
-            port=int(os.getenv("CLICKHOUSE_PORT", 9000)),
+            port=int(os.getenv("CLICKHOUSE_PORT", 8123)),
             user=os.getenv("CLICKHOUSE_USER", "default"),
-            password=os.getenv("CLICKHOUSE_PASSWORD", ""),
-            database=os.getenv("CLICKHOUSE_SENSOR_DATABASE", "datasnake"),
+            password=os.getenv("CLICKHOUSE_PASSWORD"),
+            database=os.getenv("CLICKHOUSE_SENSOR_DATABASE"),
         )
 
         # ✅ Get total count first
