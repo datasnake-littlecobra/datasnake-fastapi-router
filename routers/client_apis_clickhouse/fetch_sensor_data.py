@@ -7,6 +7,7 @@ import polars as pl
 import duckdb
 import ibis
 import os
+from db.pg_conn import pg_conn
 
 router = APIRouter()
 
@@ -232,3 +233,85 @@ async def get_sensor_data_clickhouse_query(
 #         raise HTTPException(
 #             status_code=500, detail=f"Error fetching sensor data: {str(e)}"
 #         )
+
+
+@router.post("/current-sensor-data-postgres-query")
+async def get_sensor_data_postgres_query(
+    auth_data: AuthRequest,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+):
+    """
+    Paginated sensor data via PostgreSQL query.
+    Returns: { sensor_data: [...], total: int, offset: int, limit: int, status: str }
+    """
+    try:
+        print("=" * 60)
+        print("[1/6] Enter /current-sensor-data-postgres-query")
+        print(f"[1/6] Auth: {auth_data}, offset={offset}, limit={limit}")
+
+        # Authenticate
+        print("[2/6] Authenticating...")
+        is_auth = await is_authenticated(auth_data)
+        print(f"[2/6] Auth result: {is_auth}")
+        if not is_auth:
+            return {
+                "sensor_data": [],
+                "total": 0,
+                "offset": offset,
+                "limit": limit,
+                "status": "unauthorized",
+            }
+
+        # Get total count
+        print("[3/6] Fetching total count...")
+        with pg_conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM sensor_data_processed")
+            total = cur.fetchone()[0]
+        print(f"[3/6] Total rows: {total}")
+
+        # Paginated query
+        print("[4/6] Running paginated query...")
+        sql = """
+            SELECT
+                device_id,
+                lat,
+                lon,
+                temp,
+                humidity,
+                pressure,
+                country,
+                state,
+                city,
+                postal_code,
+                timestamp
+            FROM sensor_data_processed
+            ORDER BY timestamp DESC
+            LIMIT %s OFFSET %s
+        """
+
+        with pg_conn.cursor() as cur:
+            cur.execute(sql, (limit, offset))
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+
+        data = [dict(zip(columns, row)) for row in rows]
+        print(f"[4/6] Retrieved {len(data)} rows")
+
+        print("[5/6] Returning response")
+        print("=" * 60)
+
+        return {
+            "sensor_data": data,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "status": "success",
+        }
+
+    except Exception as e:
+        logging.exception("Error in current-sensor-data-postgres-query")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching sensor data: {str(e)}",
+        )
