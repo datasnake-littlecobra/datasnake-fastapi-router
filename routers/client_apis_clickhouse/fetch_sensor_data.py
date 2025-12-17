@@ -7,7 +7,16 @@ import polars as pl
 import duckdb
 import ibis
 import os
-from db.pg_conn import pg_conn
+import psycopg
+import logging
+
+PG_DSN = os.getenv("DATABASE_URI")
+
+pg_conn = psycopg.connect(PG_DSN)
+pg_conn.autocommit = True
+pg_conn.execute("SET timezone = 'UTC'")
+
+logging.info("✅ PostgreSQL connection initialized")
 
 router = APIRouter()
 
